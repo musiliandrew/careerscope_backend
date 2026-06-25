@@ -40,7 +40,8 @@ def generate_career_card_summary(profile: Dict[str, Any]) -> Dict[str, Any]:
         # de-dup and cap to 3
         companies = list(dict.fromkeys(suggestions))[:3] or ["Stripe", "Notion", "Cloudflare"]
         score = min(98, 40 + len(skills) * 5)
-        return {"companies": companies, "score": score}
+        analysis = f"Based on your {len(skills)} technical skills, you have a solid foundation. Continue expanding your skillset to increase your match rate for {profile.get('title', 'top tech')} roles."
+        return {"companies": companies, "score": score, "analysis": analysis}
 
     if not key:
         return heuristic()
@@ -52,11 +53,13 @@ def generate_career_card_summary(profile: Dict[str, Any]) -> Dict[str, Any]:
         }
         prompt = (
             "Given a user's skills and short profile, suggest up to 3 tech companies they could work at "
-            "(array of concise brand names only, no explanations) and a CareerScore percentage 0-100.\n"
+            "(array of concise brand names only), a CareerScore percentage 0-100, and a short 'analysis'.\n"
+            "The 'analysis' must be 2-3 sentences max, evaluating their current skills against their target title. "
+            "Point out their core strengths, and specifically highlight any missing critical skills needed for that role.\n"
             f"Skills: {', '.join(skills)}\n"
-            f"Title: {profile.get('title','')}\n"
+            f"Target Title: {profile.get('title','')}\n"
             f"Summary: {profile.get('summary','')}\n"
-            "Respond as strict JSON: {\"companies\": string[], \"score\": number}."
+            "Respond as strict JSON: {\"companies\": string[], \"score\": number, \"analysis\": string}."
         )
         body = {
             "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
@@ -73,9 +76,16 @@ def generate_career_card_summary(profile: Dict[str, Any]) -> Dict[str, Any]:
             parsed = {}
         companies = parsed.get("companies") if isinstance(parsed.get("companies"), list) else []
         score = int(parsed.get("score", 72))
+        analysis = parsed.get("analysis", "Your profile has been analyzed successfully.")
+        
         if not companies:
             return heuristic()
-        return {"companies": companies[:3], "score": max(0, min(100, score))}
+            
+        return {
+            "companies": companies[:3], 
+            "score": max(0, min(100, score)),
+            "analysis": analysis
+        }
     except Exception:
         return heuristic()
 

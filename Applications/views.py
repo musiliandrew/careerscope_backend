@@ -2,8 +2,8 @@ import uuid
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.decorators import action, api_view, permission_classes
 from .models import Applications, ApplicationStatusHistory, ApplicationEvents
 from .serializers import ApplicationSerializer, ApplicationEventSerializer
 from agents.AIService import AIManager # Assuming this exists or we will use a placeholder
@@ -45,61 +45,29 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
     def _generate_ai_status_insight(self, application, new_status):
         """
-        Private method to generate AI insights on status change.
+        Private method to fire the async webhook for AI insight generation.
         """
-        try:
-            from agents.AIService.StatusInsight import generate_status_insight
-            
-            # Get old status from the most recent history before this change (if any)
-            # Since we just saved the history in perform_update, we can look at the second most recent or just pass the current 'status' before it was updated in memory? 
-            # Actually perform_update calls this AFTER saving the new status to the instance but BEFORE saving the instance? 
-            # Wait, perform_update does: instance.status = new_status (implicitly via serializer) -> save()
-            # So we need to pass the *previous* status. 
-            # In perform_update, we have `instance.status` which is the OLD status because serializer.save() hasn't been called yet?
-            # No, serializer.save() is called at the end of perform_update.
-            # Let's look at perform_update again.
-            
-            # In perform_update:
-            # instance = serializer.instance (This is the object from DB, so it has OLD status)
-            # new_status = serializer.validated_data.get('status')
-            # So we have both.
-            
-            result = generate_status_insight(
-                company=application.company_name,
-                role=application.job_title,
-                old_status=application.status, # This is still the old status on the instance
-                new_status=new_status,
-                notes=application.notes or ""
-            )
-            
-            insight_text = result.get('insight', '')
-            actions = result.get('action_items', [])
-            
-            formatted_note = f"\n\n[{timezone.now().strftime('%Y-%m-%d')}] AI Coach:\n{insight_text}\n"
-            if actions:
-                formatted_note += "Next Steps:\n" + "\n".join([f"- {action}" for action in actions])
-            
-            # We append to notes. 
-            # Note: The instance is about to be saved by serializer.save(), so we should modify the validated_data 
-            # OR modify the instance and let serializer save it.
-            # Since serializer.save() updates the instance with validated_data, if we modify instance.notes directly, 
-            # it might be overwritten if 'notes' is in validated_data.
-            # Safer to update the instance AFTER the main save, or update validated_data.
-            
-            # Let's update the application object directly and save it again to be sure, 
-            # or just append to the notes in memory if we are sure it persists.
-            # Actually, the cleanest way in perform_update is to modify the serializer's validated_data if possible,
-            # but here we are in a helper method.
-            
-            if application.notes:
-                application.notes += formatted_note
-            else:
-                application.notes = formatted_note
-                
-            application.save(update_fields=['notes'])
-            
-        except Exception as e:
-            print(f"Failed to generate AI insight: {e}")
+        import threading
+        import requests
+        import os
+
+        def fire_webhook():
+            # Use 127.0.0.1 for local internal webhook triggers
+            url = f"{os.getenv('BACKEND_URL', 'http://127.0.0.1:8000')}/api/applications/webhooks/status_insight/"
+            if not url.endswith('/'):
+                url += '/'
+            payload = {
+                "application_id": str(application.id),
+                "user_id": str(self.request.user.id),
+                "old_status": application.status,
+                "new_status": new_status,
+            }
+            try:
+                requests.post(url, json=payload, timeout=5)
+            except Exception as e:
+                print(f"Webhook trigger failed: {e}")
+
+        threading.Thread(target=fire_webhook).start()
 
     @action(detail=True, methods=['post'])
     def add_event(self, request, pk=None):
@@ -118,3 +86,88 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application = self.get_object()
         self._generate_ai_status_insight(application, application.status)
         return Response({"status": "Insight generated", "notes": application.notes})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def status_insight_webhook(request):
+    """
+    Webhook handler for generating AI insights asynchronously.
+    """
+    app_id = request.data.get('application_id')
+    user_id = request.data.get('user_id')
+    old_status = request.data.get('old_status')
+    new_status = request.data.get('new_status')
+    
+    if not all([app_id, user_id, new_status]):
+        return Response({"error": "Missing parameters"}, status=400)
+        
+    application = Applications.objects.filter(id=app_id).first()
+    if not application:
+        return Response({"error": "Application not found"}, status=404)
+        
+    # Get user profile for rich context
+    from Oauth.models import Profile
+    profile = Profile.objects.filter(user_id=user_id).first()
+    
+    tech_skills = []
+    learning_skills = []
+    if profile:
+        tech_skills = list(profile.skills.filter(want_to_learn=False).values_list('skill_name', flat=True))
+        learning_skills = list(profile.skills.filter(want_to_learn=True).values_list('skill_name', flat=True))
+        
+    # Count recent rejections
+    fourteen_days_ago = timezone.now() - timezone.timedelta(days=14)
+    recent_rejections = Applications.objects.filter(
+        user_id=user_id, 
+        status='rejected', 
+        last_status_change__gte=fourteen_days_ago
+    ).count()
+    
+    try:
+        from agents.AIService.StatusInsight import generate_status_insight
+        result = generate_status_insight(
+            company=application.company_name,
+            role=application.job_title,
+            old_status=old_status or "",
+            new_status=new_status,
+            notes=application.notes or "",
+            tech_skills=tech_skills,
+            learning_skills=learning_skills,
+            recent_rejections=recent_rejections
+        )
+        
+        insight_text = result.get('insight', '')
+        actions = result.get('action_items', [])
+        suggested_skill = result.get('suggested_skill_to_learn', '').strip()
+        
+        # Auto-update profile with missing skill
+        if suggested_skill and profile:
+            from Oauth.models import UserSkills
+            from Personalization.utils import notify_personalization_service
+            
+            skill_exists = UserSkills.objects.filter(profile=profile, skill_name__iexact=suggested_skill).exists()
+            if not skill_exists:
+                new_skill = UserSkills.objects.create(
+                    profile=profile,
+                    skill_name=suggested_skill,
+                    skill_category="AI Suggested",
+                    want_to_learn=True
+                )
+                notify_personalization_service("skill_updated", "UserSkills", new_skill.id)
+                actions.append(f"Added '{suggested_skill}' to your Learning Goals to adjust your future job matches.")
+        
+        formatted_note = f"\n\n[{timezone.now().strftime('%Y-%m-%d')}] AI Coach:\n{insight_text}\n"
+        if actions:
+            formatted_note += "Next Steps:\n" + "\n".join([f"- {action}" for action in actions])
+            
+        if application.notes:
+            application.notes += formatted_note
+        else:
+            application.notes = formatted_note
+            
+        application.save(update_fields=['notes'])
+        return Response({"status": "Success"})
+    except Exception as e:
+        print(f"Failed to generate AI insight: {e}")
+        return Response({"error": str(e)}, status=500)

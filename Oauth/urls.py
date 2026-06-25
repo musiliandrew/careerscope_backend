@@ -9,6 +9,13 @@ from .skills_views import (
     add_learning_goal,
     delete_skill,
 )
+from .resume_views import (
+    manage_experience,
+    experience_detail,
+    manage_education,
+    education_detail,
+)
+
 
 
 urlpatterns = [
@@ -37,4 +44,9 @@ urlpatterns = [
     path("skills/learning/", add_learning_goal, name="add_learning_goal"),
     path("skills/<uuid:skill_id>/", delete_skill, name="delete_skill"),
     path("integrations/<str:integration_type>/toggle/", toggle_integration, name="toggle_integration"),
+    #     MANUAL RESUME EDITING ENDPOINTS
+    path("experience/", manage_experience, name="manage_experience"),
+    path("experience/<uuid:exp_id>/", experience_detail, name="experience_detail"),
+    path("education/", manage_education, name="manage_education"),
+    path("education/<uuid:edu_id>/", education_detail, name="education_detail"),
 ]

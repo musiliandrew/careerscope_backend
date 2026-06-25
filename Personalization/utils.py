@@ -9,10 +9,23 @@ PERSONALIZATION_WEBHOOK_URL = os.getenv("PERSONALIZATION_WEBHOOK_URL", "http://l
 
 def _send_webhook(endpoint: str, payload: dict):
     url = f"{PERSONALIZATION_WEBHOOK_URL}/{endpoint}"
+    if not url.endswith('/'):
+        url += '/'
     try:
         requests.post(url, json=payload, timeout=5)
     except Exception as e:
         logger.error(f"Failed to send personalization webhook to {url}: {e}")
+
+def trigger_match_calculation(user_id: str, job_ids: list):
+    """
+    Trigger async background calculation of job matches via Webhook/Cloud Tasks.
+    """
+    payload = {
+        "user_id": str(user_id),
+        "job_ids": [str(jid) for jid in job_ids]
+    }
+    threading.Thread(target=_send_webhook, args=("webhooks/calculate_matches", payload)).start()
+
 
 def notify_personalization_service(event_type: str, object_type: str, object_id: str):
     """

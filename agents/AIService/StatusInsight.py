@@ -9,13 +9,18 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 class StatusUpdateInsight(BaseModel):
     insight: str = Field(description="A concise, encouraging, and actionable insight about the status change.")
     action_items: List[str] = Field(description="List of 1-3 specific next steps for the user.")
+    suggested_skill_to_learn: str = Field(description="If the rejection implies a specific technical skill is missing, output exactly that skill name here (e.g. 'Next.js'). Otherwise, leave empty.", default="")
 
 def generate_status_insight(
     company: str, 
     role: str, 
     old_status: str, 
     new_status: str, 
-    notes: str = ""
+    notes: str = "",
+    tech_skills: List[str] = None,
+    learning_skills: List[str] = None,
+    recent_rejections: int = 0
+
 ) -> Dict[str, Any]:
     """
     Generates an AI insight for a job application status change using LangChain and OpenRouter.
@@ -42,8 +47,15 @@ def generate_status_insight(
         parser = JsonOutputParser(pydantic_object=StatusUpdateInsight)
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a supportive and strategic career coach. A user has just updated the status of a job application. Provide a brief, encouraging insight and 1-3 actionable next steps. Keep it professional but friendly."),
-            ("user", "Company: {company}\nRole: {role}\nOld Status: {old_status}\nNew Status: {new_status}\nUser Notes: {notes}\n\n{format_instructions}")
+            ("system", "You are an elite, highly strategic career coach acting as an AI Agent for a tech professional. The user just changed a job application's status. "
+                       "Your goal is to provide a highly personalized, agentic insight correlating their current skills, what they want to learn, and their recent application track record.\n"
+                       "If they were rejected and have a high rejection count, analyze their missing skills and suggest a pivot or specific learning goal. "
+                       "If they moved to an interview, tell them which of their current skills to highlight.\n"
+                       "Do not use generic cheerleading. Be concise, direct, and actionable.\n"
+                       "Format the response perfectly matching the JSON schema."),
+            ("user", "Company: {company}\nRole: {role}\nOld Status: {old_status}\nNew Status: {new_status}\nUser Notes: {notes}\n"
+                     "User's Technical Skills: {tech_skills}\nUser's Learning Goals: {learning_skills}\n"
+                     "User's Recent Rejections (last 14 days): {recent_rejections}\n\n{format_instructions}")
         ])
 
         chain = prompt | llm | parser
@@ -54,6 +66,9 @@ def generate_status_insight(
             "old_status": old_status,
             "new_status": new_status,
             "notes": notes,
+            "tech_skills": ", ".join(tech_skills) if tech_skills else "None specified",
+            "learning_skills": ", ".join(learning_skills) if learning_skills else "None specified",
+            "recent_rejections": recent_rejections,
             "format_instructions": parser.get_format_instructions()
         })
 

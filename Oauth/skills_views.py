@@ -57,8 +57,14 @@ def get_user_skills(request):
             }
             for skill in technical_skills
         ],
-        "softSkills": [skill['skill_name'] for skill in soft_skills],
-        "wantToLearn": [skill['skill_name'] for skill in want_to_learn]
+        "softSkills": [
+            {"id": str(skill['id']), "name": skill['skill_name']} 
+            for skill in soft_skills
+        ],
+        "wantToLearn": [
+            {"id": str(skill['id']), "name": skill['skill_name']} 
+            for skill in want_to_learn
+        ]
     }, status=status.HTTP_200_OK)
 
 

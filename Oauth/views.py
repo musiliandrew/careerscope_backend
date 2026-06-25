@@ -610,10 +610,7 @@ def upload_cv(request: Request):
             return Response({"info": "Extraction failed", "detail": str(e)}, status=500)
 
     else:
-        # SAVE MODE: Save extracted data to database (resume_data only)
-        # As per user request: Do NOT overwrite manual profile fields/skills.
-        # Store the AI extraction for job matching usage.
-        
+        # SAVE MODE: Save extracted data to database
         print(f"DEBUG: Save Mode Triggered. Data keys: {request.data.keys()}")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         data = request.data
@@ -621,15 +618,56 @@ def upload_cv(request: Request):
         # Save validation results / extraction to resume_data field
         profile.resume_data = data
         profile.save(update_fields=["resume_data"])
-        print("DEBUG: Saved extracted data to profile.resume_data")
+        
+        # Auto-populate WorkExperience
+        experiences = data.get("experiences", [])
+        exp_added = 0
+        if experiences and isinstance(experiences, list):
+            for exp in experiences:
+                # Basic check to avoid duplicates by title/company
+                title = exp.get("role") or exp.get("title") or ""
+                company = exp.get("company", "")
+                if title and company:
+                    _, created = WorkExperience.objects.get_or_create(
+                        profile=profile,
+                        title=title[:100],
+                        company=company[:100],
+                        defaults={
+                            "description": exp.get("description", ""),
+                            "location": exp.get("location", "")[:100]
+                        }
+                    )
+                    if created:
+                        exp_added += 1
+
+        # Auto-populate EducationBackground
+        education_list = data.get("education_background", [])
+        edu_added = 0
+        if education_list and isinstance(education_list, list):
+            for edu in education_list:
+                degree = edu.get("degree") or edu.get("certification") or ""
+                institution = edu.get("institution", "")
+                if degree and institution:
+                    _, created = EducationBackground.objects.get_or_create(
+                        profile=profile,
+                        certification=degree[:50],
+                        institution=institution[:100],
+                        defaults={
+                            "field_of_learning": edu.get("field", "")[:100]
+                        }
+                    )
+                    if created:
+                        edu_added += 1
+                        
+        print(f"DEBUG: Saved extracted data. Added {exp_added} jobs, {edu_added} degrees.")
 
         return Response({
             "info": "Profile Updated Successfully",
             "details": {
                 "profile": "No changes (Manual mode)",
                 "skills_added": 0,
-                "education_added": 0,
-                "experience_added": 0,
+                "education_added": edu_added,
+                "experience_added": exp_added,
                 "resume_data_saved": True
             }
         }, status=status.HTTP_200_OK)
@@ -644,9 +682,12 @@ def career_card_summary(request: Request):
     """
     profile = Profile.objects.get(user=request.user)
     skills_qs = profile.skills.all().values_list("skill_name", flat=True)
+    pref = profile.preferences.first()
+    target_role = pref.target_role if pref and pref.target_role else getattr(profile, "target_role", "")
+    
     snapshot = {
         "skills": list(skills_qs),
-        "title": getattr(profile, "target_role", "") or "",
+        "title": target_role,
         "summary": getattr(profile, "full_name", "") + " has " + str(len(skills_qs)) + " skills",
     }
     data = generate_career_card_summary(snapshot)

@@ -1,7 +1,7 @@
 from django.shortcuts import render
 
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -43,10 +43,26 @@ def recommended_jobs(request: Request) -> Response:
     jobs = list(Jobs.objects.filter(id__in=job_ids).select_related('company', 'location'))
     jobs_by_id = {str(j.id): j for j in jobs}
 
-    from Intelligence.JobMatching.matcher import calculate_win_probability
-
+    # Fetch cached scores
+    from Jobs.models import JobMatchScores
+    from .utils import trigger_match_calculation
+    from django.utils import timezone
+    
+    cached_scores = JobMatchScores.objects.filter(
+        user=user, 
+        job_id__in=job_ids
+    )
+    
+    # Only use cache if it's less than 3 days old
+    recent_cache = {
+        str(cs.job_id): cs 
+        for cs in cached_scores 
+        if cs.calculated_at and (timezone.now() - cs.calculated_at).days < 3
+    }
+    
+    jobs_to_calculate = []
     out = []
-    # Limit to top 8 for deep analysis to ensure snappy user experience and avoid timeouts
+    
     for r in results[:8]:
         payload = r.get("payload") or {}
         jid = payload.get("job_id")
@@ -54,26 +70,19 @@ def recommended_jobs(request: Request) -> Response:
         if not job:
             continue
             
-        # Run the deep signal matching algorithm
-        try:
-            match_data = calculate_win_probability(profile, job, deep_analysis=True)
-            display_score = match_data.get("win_probability")
-            if display_score is None:
-                display_score = match_data.get("overall_score")
-            
-            # Final sanity check: if literally None, use vector fallback
-            if display_score is None:
-                raise ValueError("No score in results")
-                
-            display_score = int(display_score)
-            reasons = match_data.get("reasons", "")
-            concerns = match_data.get("concerns", "")
-        except Exception as e:
-            # Fallback to vector score if matcher fails
+        cached = recent_cache.get(jid)
+        
+        if cached:
+            display_score = int(cached.win_probability if cached.win_probability is not None else cached.overall_score)
+            reasons = cached.match_reasons or ""
+            concerns = cached.concerns or ""
+        else:
+            # Cache miss! Use raw vector score as fast fallback and trigger async calc
             raw_score = r.get("score") or 0
-            display_score = int(max(10, min(100, (raw_score - 0.4) * 200))) # Slightly more generous fallback
-            reasons = "Good semantic match based on your skills profile."
+            display_score = int(max(10, min(100, (raw_score - 0.4) * 200)))
+            reasons = "AI is currently analyzing your professional signals for this specific role..."
             concerns = ""
+            jobs_to_calculate.append(jid)
         
         out.append(
             {
@@ -95,6 +104,10 @@ def recommended_jobs(request: Request) -> Response:
                 "match_concerns": concerns,
             }
         )
+
+    # Trigger background calculation for jobs without a recent cache
+    if jobs_to_calculate:
+        trigger_match_calculation(user.id, jobs_to_calculate)
 
     # Sort results by the new job match score
     out.sort(key=lambda x: x["job_match"], reverse=True)
@@ -136,3 +149,35 @@ def learning_recommendations(request: Request) -> Response:
 
     return Response({"results": recs})
 
+@api_view(["POST"])
+@permission_classes([AllowAny]) # Webhook should be secured via token in production
+def calculate_matches_webhook(request: Request) -> Response:
+    """
+    Background webhook to calculate deep job matches for a user asynchronously.
+    """
+    user_id = request.data.get("user_id")
+    job_ids = request.data.get("job_ids", [])
+    
+    if not user_id or not job_ids:
+        return Response({"error": "Missing user_id or job_ids"}, status=400)
+        
+    try:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = User.objects.get(id=user_id)
+        profile = Profile.objects.get(user=user)
+        
+        jobs = Jobs.objects.filter(id__in=job_ids)
+        
+        from Intelligence.JobMatching.matcher import calculate_win_probability
+        
+        for job in jobs:
+            # Force deep analysis, cache handles saving
+            try:
+                calculate_win_probability(profile, job, deep_analysis=True)
+            except Exception as e:
+                print(f"Error calculating match for job {job.id}: {e}")
+                
+        return Response({"status": "success", "calculated": len(jobs)})
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

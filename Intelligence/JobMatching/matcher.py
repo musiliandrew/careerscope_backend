@@ -10,8 +10,6 @@ def calculate_win_probability(profile: Profile, job: Jobs, deep_analysis: bool =
     """
     Implements a 'Signal Matching' algorithm that estimates win probability.
     Relative to the competition, and turns that into a probability of success.
-    
-    NOTE: DB caching is temporarily disabled to resolve 'relation missing' errors.
     """
     
     # 1. Gather Candidate Signals
@@ -35,20 +33,20 @@ def calculate_win_probability(profile: Profile, job: Jobs, deep_analysis: bool =
     company_tier = job.company.tier if job.company else "startup"
     apply_count = job.apply_count or 0
     
-    # 3. Check for existing cached score (DISABLED for now)
-    # try:
-    #     from Jobs.models import JobMatchScores
-    #     cached = JobMatchScores.objects.filter(user=profile.user, job=job).order_by('-calculated_at').first()
-    #     if cached and cached.calculated_at and (timezone.now() - cached.calculated_at).days < 1:
-    #         return {
-    #             "overall_score": float(cached.overall_score or 0),
-    #             "win_probability": float(cached.overall_score or 0),
-    #             "reasons": cached.match_reasons,
-    #             "concerns": cached.concerns,
-    #             "cached": True
-    #         }
-    # except:
-    #     pass
+    # 3. Check for existing cached score
+    try:
+        from Jobs.models import JobMatchScores
+        cached = JobMatchScores.objects.filter(user=profile.user, job=job).order_by('-calculated_at').first()
+        if cached and cached.calculated_at and (timezone.now() - cached.calculated_at).days < 3:
+            return {
+                "overall_score": float(cached.overall_score or 0),
+                "win_probability": float(cached.overall_score or 0),
+                "reasons": cached.match_reasons,
+                "concerns": cached.concerns,
+                "cached": True
+            }
+    except Exception as e:
+        print(f"Cache read error: {e}")
 
     # 4. Deep Alignment Algorithm (Heuristic + AI)
     key = os.getenv("OPENROUTER_API_KEY")
@@ -140,15 +138,25 @@ def calculate_win_probability(profile: Profile, job: Jobs, deep_analysis: bool =
         except Exception as e:
             print(f"Matcher AI Error: {e}")
 
-    # 5. Save/Update cache record (DISABLED to fix errors)
-    # try:
-    #     from Jobs.models import JobMatchScores
-    #     import uuid
-    #     win_prob = result.get("win_probability") or result.get("overall_score") or 50
-    #     overall = result.get("overall_score") or win_prob
-    #     JobMatchScores.objects.update_or_create(...)
-    # except:
-    #     pass
+    # 5. Save/Update cache record
+    try:
+        from Jobs.models import JobMatchScores
+        import uuid
+        win_prob = result.get("win_probability") or result.get("overall_score") or 50
+        overall = result.get("overall_score") or win_prob
+        JobMatchScores.objects.update_or_create(
+            user=profile.user,
+            job=job,
+            defaults={
+                "overall_score": overall,
+                "match_reasons": result.get("reasons", ""),
+                "concerns": result.get("concerns", ""),
+                "calculated_at": timezone.now(),
+                "ai_model_used": "openrouter" if deep_analysis else "heuristic"
+            }
+        )
+    except Exception as e:
+        print(f"Cache write error: {e}")
 
     win_prob = result.get("win_probability") or result.get("overall_score") or 50
     overall = result.get("overall_score") or win_prob
