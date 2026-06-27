@@ -70,11 +70,51 @@ class JobMatchScores(models.Model):
         unique_together = (('user', 'job'),)
 
 
+class SystemConfig(models.Model):
+    """Data-driven operational thresholds."""
+    key = models.CharField(max_length=255, primary_key=True)
+    value = models.JSONField()
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'system_config'
+
+
+class JobProviders(models.Model):
+    """
+    Canonical capability profile for ATS engines or Job Boards.
+    e.g. Greenhouse, Lever, LinkedIn.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(unique=True, max_length=100)
+    authentication_method = models.CharField(max_length=50, blank=True, null=True)
+    pagination_strategy = models.CharField(max_length=50, blank=True, null=True)
+    incremental_sync_strategy = models.CharField(max_length=50, blank=True, null=True)
+    supports_etag = models.BooleanField(default=False)
+    supports_last_modified = models.BooleanField(default=False)
+    supports_webhooks = models.BooleanField(default=False)
+    supports_cursor_pagination = models.BooleanField(default=False)
+    max_page_size = models.IntegerField(default=100)
+    request_timeout = models.IntegerField(default=30)
+    retry_policy = models.JSONField(blank=True, null=True)
+    rate_limit_rpm = models.IntegerField(default=60)
+    max_concurrent_workers = models.IntegerField(default=5)
+    cooldown_seconds = models.IntegerField(default=0)
+    status_429_history = models.JSONField(default=list, blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'job_providers'
+
+
 class JobSources(models.Model):
     name = models.CharField(unique=True, max_length=50)
+    provider = models.ForeignKey(JobProviders, on_delete=models.SET_NULL, null=True, blank=True, related_name='sources')
     base_url = models.TextField()
     is_active = models.BooleanField(blank=True, null=True)
-    rate_limit_per_minute = models.IntegerField(blank=True, null=True)
+    verification_interval = models.DurationField(blank=True, null=True)
+    expiration_interval = models.DurationField(blank=True, null=True)
     last_collection_at = models.DateTimeField(blank=True, null=True)
     total_jobs_collected = models.BigIntegerField(blank=True, null=True)
     success_rate = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
@@ -84,6 +124,83 @@ class JobSources(models.Model):
     class Meta:
         managed = True
         db_table = 'job_sources'
+
+
+class ScrapeMetadata(models.Model):
+    """
+    Operational metadata for incremental, adaptive scheduling.
+    Strictly separated from the core JobSources domain model.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.OneToOneField(JobSources, on_delete=models.CASCADE, related_name='scrape_metadata')
+    tier = models.CharField(max_length=20, default='warm')  # hot, warm, cold, archive
+    priority = models.IntegerField(default=50)  # 0-100 business importance
+    health_score = models.IntegerField(default=100)  # 0-100 computed operational health
+    failure_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    average_latency = models.DurationField(blank=True, null=True)
+    last_successful_scrape = models.DateTimeField(blank=True, null=True)
+    last_job_id_seen = models.CharField(max_length=255, blank=True, null=True)
+    etag = models.CharField(max_length=255, blank=True, null=True)
+    jobs_found_last_run = models.IntegerField(default=0)
+    average_update_frequency = models.DurationField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = 'scrape_metadata'
+
+
+class JobProcessingState(models.Model):
+    """
+    Operational state tracking for the AI Enrichment Pipeline.
+    Tracks the execution status of various capabilities for a specific job.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.OneToOneField('Jobs', on_delete=models.CASCADE, related_name='processing_state')
+    
+    # Example format: {"skill_extraction": {"status": "COMPLETED", "retries": 0, "last_updated": "2026-06-27T12:00:00Z"}}
+    capability_statuses = models.JSONField(default=dict)
+    
+    # Global state (e.g. IN_PROGRESS, COMPLETED, FAILED)
+    overall_status = models.CharField(max_length=20, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = 'job_processing_state'
+
+
+class JobEnrichments(models.Model):
+    """
+    Stores versioned AI outputs separate from operational state.
+    Provides a complete history and confidence score for every enrichment.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey('Jobs', on_delete=models.CASCADE, related_name='enrichments')
+    capability_name = models.CharField(max_length=100)  # e.g. 'skill_extraction'
+    
+    # The actual extracted data
+    result = models.JSONField()
+    
+    # Versioning & Traceability
+    model_name = models.CharField(max_length=100, blank=True, null=True)  # e.g. 'gemini-1.5-pro'
+    model_version = models.CharField(max_length=50, blank=True, null=True)
+    prompt_version = models.CharField(max_length=50, blank=True, null=True)
+    confidence_score = models.DecimalField(max_digits=5, decimal_places=4, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'job_enrichments'
+        # A job shouldn't have multiple current active enrichments of the exact same capability
+        # unless we explicitly model active vs history. We'll rely on the most recent row or a status field.
+        # But we want history, so no unique_together.
+        indexes = [
+            models.Index(fields=['job', 'capability_name', '-created_at']),
+        ]
         
 
 class JobQuerySet(QuerySet):
@@ -141,6 +258,7 @@ class Jobs(models.Model):
     technologies = ArrayField(models.CharField(max_length=100), blank=True, null=True, default=list)
     categories = ArrayField(models.CharField(max_length=100), blank=True, null=True, default=list)
     external_url = models.TextField()
+    job_hash = models.CharField(max_length=64, unique=True, blank=True, null=True)  # SHA-256 Hash for deduplication
     apply_url = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, blank=True, null=True)
     posted_at = models.DateTimeField()
