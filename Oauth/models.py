@@ -213,3 +213,21 @@ class Project(models.Model):
     link = models.URLField(blank=True, null=True)
     metadata = models.JSONField(blank=True, null=True, default=dict)
 
+
+class DecisionLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="decision_history")
+    decision_type = models.CharField(max_length=150)
+    inputs = models.JSONField(default=dict)
+    conclusion = models.JSONField(default=dict)
+    reasoning_process = models.TextField(blank=True, null=True)
+    confidence = models.DecimalField(max_digits=4, decimal_places=3, default=0.0)
+    evidence_referenced = models.ManyToManyField(Evidence, related_name="decisions_supported", blank=True)
+    strategy_used = models.CharField(max_length=50, blank=True, null=True)
+    model_version = models.CharField(max_length=100, blank=True, null=True)
+    twin_version_id = models.CharField(max_length=100, blank=True, null=True) # E.g., snapshot hash
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "decision_logs"

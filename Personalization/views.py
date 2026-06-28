@@ -181,3 +181,31 @@ def calculate_matches_webhook(request: Request) -> Response:
         return Response({"status": "success", "calculated": len(jobs)})
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def mission_control_view(request: Request) -> Response:
+    """
+    Returns the aggregated Mission Control Dashboard View Model.
+    """
+    from Personalization.services.mission_control import MissionControlService
+    
+    response_data = MissionControlService.build(request.user.id)
+    if "error" in response_data:
+        return Response(response_data, status=400)
+        
+    return Response(response_data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def job_details_view(request: Request, job_id: str) -> Response:
+    """
+    Returns the Job Details View Model natively exposing the reasoning.
+    """
+    from Personalization.services.job_details import JobDetailsService
+    
+    response_data = JobDetailsService.build(request.user.id, job_id)
+    if "error" in response_data:
+        return Response(response_data, status=404)
+        
+    return Response(response_data)
