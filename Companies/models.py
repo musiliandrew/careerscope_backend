@@ -190,3 +190,59 @@ class TechTrendNews(models.Model):
     class Meta:
         managed = True
         db_table = 'tech_trend_news'
+
+# ============================================
+# DYNAMIC COMPANY INTELLIGENCE MODELS
+# ============================================
+
+class CompanySource(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Companies, on_delete=models.CASCADE, related_name='sources')
+    url = models.TextField(unique=True)
+    source_type = models.CharField(max_length=50) # e.g., 'engineering_blog', 'careers', 'github', 'news'
+    is_active = models.BooleanField(default=True)
+    last_crawled_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'company_sources'
+
+class CompanyDocument(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Companies, on_delete=models.CASCADE, related_name='documents')
+    source = models.ForeignKey(CompanySource, on_delete=models.SET_NULL, null=True, blank=True)
+    source_url = models.TextField()
+    content_raw = models.TextField()
+    content_markdown = models.TextField(blank=True, null=True)
+    crawl_timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'company_documents'
+
+class CompanyKnowledge(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Companies, on_delete=models.CASCADE, related_name='knowledge')
+    document = models.ForeignKey(CompanyDocument, on_delete=models.SET_NULL, null=True, blank=True)
+    fact_type = models.CharField(max_length=100) # e.g., 'technology_used', 'culture_principle', 'benefit'
+    content = models.TextField() # Structured fact
+    confidence_score = models.DecimalField(max_digits=3, decimal_places=2) # 0.00 to 1.00
+    model_version = models.CharField(max_length=100) # e.g., 'gemini-1.5-pro'
+    evidence_reference = models.TextField(blank=True, null=True) # Direct quote or pointer
+    extracted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'company_knowledge'
+
+class CompanyObservation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Companies, on_delete=models.CASCADE, related_name='observations')
+    observation_type = models.CharField(max_length=100) # e.g., 'hiring_velocity', 'tech_adoption'
+    value = models.JSONField() # Flexible payload for time-series data
+    observed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'company_observations'

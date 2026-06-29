@@ -7,7 +7,13 @@ from rest_framework.response import Response
 
 from Jobs.models import Jobs
 from Oauth.models import Profile
-from Intelligence.vectorDB.client import embed_text, search_jobs
+
+# Temporary mock for migrated vectorDB client
+def embed_text(text):
+    return []
+
+def search_jobs(vector, limit=5):
+    return []
 
 
 @api_view(["GET"])
@@ -205,6 +211,20 @@ def job_details_view(request: Request, job_id: str) -> Response:
     from Personalization.services.job_details import JobDetailsService
     
     response_data = JobDetailsService.build(request.user.id, job_id)
+    if "error" in response_data:
+        return Response(response_data, status=404)
+        
+    return Response(response_data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def company_intelligence_view(request: Request, company_id: str) -> Response:
+    """
+    Returns the Dynamic Company Intelligence View Model.
+    """
+    from Personalization.services.company_intelligence import CompanyIntelligenceService
+    
+    response_data = CompanyIntelligenceService.build(request.user.id, company_id)
     if "error" in response_data:
         return Response(response_data, status=404)
         

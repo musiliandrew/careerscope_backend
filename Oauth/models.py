@@ -231,3 +231,119 @@ class DecisionLog(models.Model):
     class Meta:
         managed = True
         db_table = "decision_logs"
+
+
+# ==========================================
+# PRIORITY 3: CAREER INTELLIGENCE PLATFORM 
+# (The Evidence Graph & Versioned Snapshots)
+# ==========================================
+
+class EvidenceNode(models.Model):
+    """
+    The canonical domain model for all proof. 
+    Everything (Project, Repo, Publication, Employment, URL) is a node.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid4)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="evidence_nodes")
+    
+    node_type = models.CharField(max_length=50) # 'repository', 'publication', 'assessment', 'url'
+    source = models.CharField(max_length=100) # 'github', 'linkedin', 'user_upload'
+    url = models.URLField(blank=True, null=True)
+    
+    # AI Extracted or Raw Metadata
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    metadata = models.JSONField(blank=True, null=True, default=dict) # stars, commits, duration
+    
+    # Relationships to other evidence nodes (e.g., Repo supports Project)
+    related_nodes = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='supported_by')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "evidence_nodes"
+
+
+class CapabilityNode(models.Model):
+    """
+    The Intelligence Mirror (Capability Graph).
+    Computed intelligence, never manually edited by the user.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid4)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="capability_nodes")
+    
+    name = models.CharField(max_length=100) # e.g., 'Python', 'Machine Learning'
+    category = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Raw Features
+    verification_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.0) # 0-100
+    depth_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    freshness_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    market_relevance = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    
+    # Overall intrinsic capability
+    capability_score = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    
+    # Graph hierarchy (Python -> supports -> Machine Learning)
+    parent_capabilities = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='sub_capabilities')
+    
+    # Explainability
+    supported_by_evidence = models.ManyToManyField(EvidenceNode, blank=True, related_name="supports_capabilities")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "capability_nodes"
+
+
+class IntelligenceSnapshot(models.Model):
+    """
+    Versioned Intelligence. Snapshots are never overwritten.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid4)
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name="intelligence_snapshots")
+    
+    version = models.IntegerField()
+    previous_snapshot = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null=True)
+    
+    # The Trajectory Context
+    target_role = models.CharField(max_length=255)
+    
+    # Aggregated Scores
+    career_readiness = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    estimated_time_months = models.IntegerField(blank=True, null=True)
+    
+    # Snapshot payload of the Capability Graph and Role Readiness at this exact moment
+    capability_state = models.JSONField(default=dict)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "intelligence_snapshots"
+        unique_together = (('profile', 'version'),)
+
+
+class NavigatorAction(models.Model):
+    """
+    The Global Planning Engine recommendations.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid4)
+    snapshot = models.ForeignKey(IntelligenceSnapshot, on_delete=models.CASCADE, related_name="navigator_actions")
+    
+    sequence_order = models.IntegerField()
+    action_type = models.CharField(max_length=50) # 'verify_skill', 'build_project', 'upload_evidence'
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    
+    # The mathematical impact
+    roi_impact_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    
+    is_completed = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "navigator_actions"
+        ordering = ['sequence_order']
