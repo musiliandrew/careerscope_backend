@@ -30,7 +30,7 @@ urlpatterns = [
     path("profile/avatar/", upload_avatar, name="avatar_upload"),
     path("profile/cv_upload/", upload_cv, name="cv_upload"),
     path("profile/card/summary/", career_card_summary, name="career_card_summary"),
-    path("settings/", update_settings, name="update_settings"),
+    # path("settings/", update_settings, name="update_settings"),
     #     SKILLS ENDPOINTS
     path("skills/", get_user_skills, name="get_skills"),
     path("skills/technical/", add_technical_skill, name="add_technical_skill"),

@@ -1,7 +1,8 @@
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 from Oauth.models import Profile
-from Jobs.models import Jobs, Company
+from Jobs.models import Jobs
+from Companies.models import Companies
 from django.contrib.auth.models import User
 from Intelligence.JobMatching.matcher import calculate_win_probability
 
@@ -9,7 +10,7 @@ class MatcherIntegrationTest(TestCase):
     def setUp(self):
         self.user = User.objects.create(username="testuser")
         self.profile = Profile.objects.create(user=self.user)
-        self.company = Company.objects.create(name="OpenAI")
+        self.company = Companies.objects.create(name="OpenAI")
         self.job = Jobs.objects.create(
             title="Machine Learning Engineer",
             company=self.company,
