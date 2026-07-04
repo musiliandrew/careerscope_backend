@@ -165,30 +165,3 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
-# Celery settings
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/1")
-CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "False") == "True"
-CELERY_TIMEZONE = TIME_ZONE
-
-# Celery Beat schedule: run URL backfill hourly
-from celery.schedules import crontab  # type: ignore
-
-# ─── Celery Beat Schedule ────────────────────────────────────────────────────
-# NOTE: Job/News/Company data ingestion tasks have been moved to the
-# standalone 'data-ingestion-system' FastAPI service (APScheduler).
-# Only user-triggered / Django-ORM-dependent tasks remain here.
-CELERY_BEAT_SCHEDULE = {
-    # Gmail + Google Calendar sync every 3 hours (requires Django ORM: Profile, Applications)
-    "sync-all-connected-accounts-3h": {
-        "task": "DataIngestion.Gmail.tasks.sync_all_connected_accounts",
-        "schedule": crontab(minute=5, hour="*/3"),
-        "options": {"queue": "ingestion"},
-    },
-    # Index fresh jobs into VectorDB every hour (requires Django Intelligence layer)
-    "index-recent-jobs-vectordb-hourly": {
-        "task": "Intelligence.vectorDB.index_recent_jobs",
-        "schedule": crontab(minute=40, hour="*"),
-        "options": {"queue": "ingestion"},
-    },
-}

@@ -3,12 +3,7 @@ from django.dispatch import receiver
 from django.db import transaction
 
 from Companies.models import Companies
-from Companies.tasks import (
-    backfill_company_urls_for_company,
-    ingest_company_news_for_company,
-    enrich_company_metadata_for_company,
-    ingest_company_jobs_for_company,
-)
+from backend.cloud_tasks import enqueue_task
 
 
 @receiver(post_save, sender=Companies)
@@ -17,10 +12,20 @@ def companies_post_save(sender, instance: Companies, created: bool, **kwargs):
         return
 
     def _enqueue():
-        backfill_company_urls_for_company.delay(str(instance.id))
-        enrich_company_metadata_for_company.delay(str(instance.id))
-        ingest_company_news_for_company.delay(str(instance.id), max_items=3)
-        ingest_company_jobs_for_company.delay(str(instance.id))
+        # Dispatch a Cloud Task directly to the data-ingestion-system's worker
+        enqueue_task(
+            endpoint="/worker/consume",
+            payload={
+                "message": {
+                    "data": __import__("base64").b64encode(
+                        __import__("json").dumps({
+                            "source_id": str(instance.id),
+                            "source_name": "company_onboarding_pipeline",
+                        }).encode()
+                    ).decode()
+                }
+            }
+        )
 
     # Ensure tasks run after transaction commits (admin create)
     transaction.on_commit(_enqueue)

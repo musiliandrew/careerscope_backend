@@ -98,12 +98,8 @@ def analyze_tech_trends():
 
 def synthesize_tech_commentary():
     """
-    Uses AI to create a 'What people are talking about' summary.
+    Uses AI microservice to create a 'What people are talking about' summary.
     """
-    key = os.getenv("OPENROUTER_API_KEY")
-    if not key:
-        return "Tech landscape is shifting towards AI integration and efficient DX."
-
     # Get top trends and recent news
     top_techs = TechTrend.objects.order_by('-popularity_score')[:5]
     top_names = [t.name for t in top_techs]
@@ -111,23 +107,19 @@ def synthesize_tech_commentary():
     recent_news = NewsArticles.objects.order_by('-published_at')[:10]
     news_titles = [n.title for n in recent_news]
 
-    prompt = (
-        f"Analyze these current tech trends: {', '.join(top_names)}.\n"
-        f"Based on these recent headlines: {'; '.join(news_titles)}.\n"
-        f"Write a short, punchy 'What's Hot' summary (2-3 sentences) about what developers are talking about RIGHT NOW. "
-        f"Mention social sentiment and emerging technologies."
-    )
-
-    try:
-        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-        body = {
-            "model": "openai/gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}]
+    import requests
+    ai_url = f"{os.getenv('AI_ENRICHMENT_URL', 'http://127.0.0.1:8002')}/sync-execute"
+    payload = {
+        "capability": "tech_trends_commentary",
+        "payload": {
+            "trends": top_names,
+            "news": news_titles
         }
-        resp = requests.post("https://openrouter.ai/api/v1/chat/completions", json=body, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-    except:
-        pass
+    }
     
-    return f"The community is buzzing about {', '.join(top_names[:3])}."
+    try:
+        resp = requests.post(ai_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        return resp.json().get("result", {}).get("commentary", f"The community is buzzing about {', '.join(top_names[:3])}.")
+    except Exception:
+        return f"The community is buzzing about {', '.join(top_names[:3])}."

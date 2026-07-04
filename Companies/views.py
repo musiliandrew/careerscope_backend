@@ -19,7 +19,7 @@ from .serializers import (
     MarketInsightSerializer,
     IndustryTrendSerializer,
 )
-from Intelligence.Trends.analyzer import synthesize_tech_commentary, analyze_tech_trends
+from Companies.analyzer import synthesize_tech_commentary, analyze_tech_trends
 from Jobs.models import Jobs
 
 

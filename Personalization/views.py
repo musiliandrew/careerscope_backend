@@ -8,12 +8,7 @@ from rest_framework.response import Response
 from Jobs.models import Jobs
 from Oauth.models import Profile
 
-# Temporary mock for migrated vectorDB client
-def embed_text(text):
-    return []
-
-def search_jobs(vector, limit=5):
-    return []
+# Views now delegate AI and Vector Search to microservices
 
 
 @api_view(["GET"])
@@ -32,20 +27,21 @@ def recommended_jobs(request: Request) -> Response:
         return Response({"results": [], "detail": "No profile"})
 
     q = request.query_params.get("q") or ""
-    skills_qs = profile.skills.all().values_list("skill_name", flat=True)
-    skills_text = ", ".join(skills_qs)
-
-    base_text = f"Skills: {skills_text}"
-    if q:
-        base_text += f"\nQuery: {q}"
-
+    
+    import requests
+    import os
+    
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/recommended-jobs/{user.id}"
+    params = {"q": q} if q else {}
+    
     try:
-        emb = embed_text(base_text)
-        results = search_jobs(emb, top_k=20)
+        resp = requests.get(ps_url, params=params, timeout=10)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
     except Exception as exc:
         return Response({"results": [], "error": str(exc)[:300]}, status=500)
 
-    job_ids = [r.get("payload", {}).get("job_id") for r in results if r.get("payload")]
+    job_ids = [r.get("id") for r in results if r.get("id")]
     jobs = list(Jobs.objects.filter(id__in=job_ids).select_related('company', 'location'))
     jobs_by_id = {str(j.id): j for j in jobs}
 
@@ -144,10 +140,26 @@ def learning_recommendations(request: Request) -> Response:
         # Final fallback
         learning_skills = ["Software Engineering", "Cloud Computing"]
 
-    from agents.AIService.OpenRouterAI import generate_learning_recommendations
+    import requests
+    import os
+    
+    ai_url = f"{os.getenv('AI_ENRICHMENT_URL', 'http://127.0.0.1:8002')}/sync-execute"
+    payload = {
+        "capability": "learning_recommendations",
+        "payload": {
+            "skills": learning_skills
+        }
+    }
+    
+    try:
+        response = requests.post(ai_url, json=payload, timeout=20)
+        response.raise_for_status()
+        recs = response.json().get("result", [])
+    except Exception as e:
+        print(f"Error fetching learning recommendations from AI microservice: {e}")
+        recs = []
+        
     from .utils import wrap_affiliate_link
-
-    recs = generate_learning_recommendations(learning_skills)
     
     # Wrap with affiliate links
     for r in recs:
@@ -175,7 +187,7 @@ def calculate_matches_webhook(request: Request) -> Response:
         
         jobs = Jobs.objects.filter(id__in=job_ids)
         
-        from Intelligence.JobMatching.matcher import calculate_win_probability
+        from Jobs.matching_client import calculate_win_probability
         
         for job in jobs:
             # Force deep analysis, cache handles saving
@@ -192,40 +204,49 @@ def calculate_matches_webhook(request: Request) -> Response:
 @permission_classes([IsAuthenticated])
 def mission_control_view(request: Request) -> Response:
     """
-    Returns the aggregated Mission Control Dashboard View Model.
+    Returns the aggregated Mission Control Dashboard View Model via microservice.
     """
-    from Personalization.services.mission_control import MissionControlService
+    import requests
+    import os
     
-    response_data = MissionControlService.build(request.user.id)
-    if "error" in response_data:
-        return Response(response_data, status=400)
-        
-    return Response(response_data)
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/mission-control/{request.user.id}"
+    try:
+        resp = requests.get(ps_url, timeout=10)
+        resp.raise_for_status()
+        return Response(resp.json())
+    except Exception as e:
+        return Response({"error": f"Failed to fetch mission control: {str(e)}"}, status=500)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def job_details_view(request: Request, job_id: str) -> Response:
     """
-    Returns the Job Details View Model natively exposing the reasoning.
+    Returns the Job Details View Model natively exposing the reasoning via microservice.
     """
-    from Personalization.services.job_details import JobDetailsService
+    import requests
+    import os
     
-    response_data = JobDetailsService.build(request.user.id, job_id)
-    if "error" in response_data:
-        return Response(response_data, status=404)
-        
-    return Response(response_data)
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/job-details/{request.user.id}/{job_id}"
+    try:
+        resp = requests.get(ps_url, timeout=10)
+        resp.raise_for_status()
+        return Response(resp.json())
+    except Exception as e:
+        return Response({"error": f"Failed to fetch job details: {str(e)}"}, status=500)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def company_intelligence_view(request: Request, company_id: str) -> Response:
     """
-    Returns the Dynamic Company Intelligence View Model.
+    Returns the Dynamic Company Intelligence View Model via microservice.
     """
-    from Personalization.services.company_intelligence import CompanyIntelligenceService
+    import requests
+    import os
     
-    response_data = CompanyIntelligenceService.build(request.user.id, company_id)
-    if "error" in response_data:
-        return Response(response_data, status=404)
-        
-    return Response(response_data)
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/company-intelligence/{request.user.id}/{company_id}"
+    try:
+        resp = requests.get(ps_url, timeout=15)
+        resp.raise_for_status()
+        return Response(resp.json())
+    except Exception as e:
+        return Response({"error": f"Failed to fetch company intelligence: {str(e)}"}, status=500)

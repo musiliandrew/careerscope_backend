@@ -6,8 +6,6 @@ from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
 from .models import Applications, ApplicationStatusHistory, ApplicationEvents
 from .serializers import ApplicationSerializer, ApplicationEventSerializer
-from agents.AIService import AIManager # Assuming this exists or we will use a placeholder
-
 class ApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ApplicationSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -125,17 +123,29 @@ def status_insight_webhook(request):
     ).count()
     
     try:
-        from agents.AIService.StatusInsight import generate_status_insight
-        result = generate_status_insight(
-            company=application.company_name,
-            role=application.job_title,
-            old_status=old_status or "",
-            new_status=new_status,
-            notes=application.notes or "",
-            tech_skills=tech_skills,
-            learning_skills=learning_skills,
-            recent_rejections=recent_rejections
-        )
+        import requests
+        import os
+        
+        ai_url = f"{os.getenv('AI_ENRICHMENT_URL', 'http://127.0.0.1:8002')}/sync-execute"
+        payload = {
+            "capability": "status_insight",
+            "payload": {
+                "company": application.company_name,
+                "role": application.job_title,
+                "old_status": old_status or "",
+                "new_status": new_status,
+                "notes": application.notes or "",
+                "tech_skills": tech_skills,
+                "learning_skills": learning_skills,
+                "recent_rejections": recent_rejections
+            }
+        }
+        
+        response = requests.post(ai_url, json=payload, timeout=15)
+        response.raise_for_status()
+        
+        enrichment = response.json()
+        result = enrichment.get("result", {})
         
         insight_text = result.get('insight', '')
         actions = result.get('action_items', [])

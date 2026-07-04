@@ -19,11 +19,6 @@ from django.conf import settings
 import logging
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils import timezone
-from agents.AIService.GeminiAI import ResumeExtractionAgent
-from agents.AIService import AIManager
-from agents.AIService.OpenRouterAI import generate_career_card_summary
-from agents.DocReader import read_resume
-from agents.models import Profile as p
 from .models import Profile, UserSkills, EducationBackground, WorkExperience, Project, JobPreferences, CareerGoals
 from .backblaze import blaze_client
 from Personalization.utils import notify_personalization_service
@@ -42,7 +37,6 @@ GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
 FRONTEND_URL = os.getenv("FRONTEND_URL")  # Vite default
 CALLBACK_PATH = "/oauth/callback"
 
-resume_agent = ResumeExtractionAgent(open_router=True)
 logger = logging.getLogger(__name__)
 
 
@@ -597,10 +591,25 @@ def upload_cv(request: Request):
             if not markdown_text or len(markdown_text.strip()) < 50:
                 print("WARNING: Extracted text is very short/empty! Is markitdown[pdf] installed/working?")
         
-            response: p = resume_agent(markdown=markdown_text)
-            print(f"AI RESPONSE: {response}")
+            import requests
+            import os
+            
+            ai_url = f"{os.getenv('AI_ENRICHMENT_URL', 'http://127.0.0.1:8002')}/sync-execute"
+            payload = {
+                "capability": "resume_parser",
+                "payload": {
+                    "markdown": markdown_text
+                }
+            }
+            
+            ai_resp = requests.post(ai_url, json=payload, timeout=30)
+            ai_resp.raise_for_status()
+            
+            enrichment = ai_resp.json()
+            extracted_profile = enrichment.get("result", {})
+            
             return Response(
-                response.model_dump_json(),
+                extracted_profile,
                 status=status.HTTP_200_OK
             )
         except Exception as e:

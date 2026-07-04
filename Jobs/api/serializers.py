@@ -54,7 +54,7 @@ class JobListSerializer(serializers.ModelSerializer):
             if not profile:
                 return {"win_probability": 45, "reasons": None, "concerns": None}
             
-            from Intelligence.JobMatching.matcher import calculate_win_probability
+            from Jobs.matching_client import calculate_win_probability
             try:
                 # One call instead of three
                 self._cached_match_results[job_id] = calculate_win_probability(profile, obj, deep_analysis=False)

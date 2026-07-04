@@ -42,7 +42,7 @@ class JobsListView(generics.ListAPIView):
             qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(company__name__icontains=q))
         if role in ['ds','ai','ml','swe']:
             # coarse filter against title/description
-            from DataIngestion.Jobs.filters import ROLE_KEYWORDS
+            from Jobs.filters import ROLE_KEYWORDS
             any_terms = ROLE_KEYWORDS.get(role, [])
             filt = Q()
             for t in any_terms:
