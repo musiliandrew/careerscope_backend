@@ -10,11 +10,13 @@ from .views import (
     RefreshTrendsView,
     GlobalCompanyNewsView,
     MarketInsightsView,
+    DynamicCompanyFollowView,
 )
 
 urlpatterns = [
     path("feed/", CompaniesFeedView.as_view(), name="companies_feed"),
     path("", CompaniesListView.as_view(), name="companies_list"),
+    path("dynamic-follow/", DynamicCompanyFollowView.as_view(), name="dynamic_company_follow"),
     path("<uuid:id>/", CompanyDetailView.as_view(), name="company_detail"),
     path("<uuid:company_id>/news/", CompanyNewsListView.as_view(), name="company_news"),
     path("<uuid:company_id>/jobs/", CompanyJobsListView.as_view(), name="company_jobs"),

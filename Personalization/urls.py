@@ -1,5 +1,14 @@
 from django.urls import path
-from .views import recommended_jobs, learning_recommendations, calculate_matches_webhook, mission_control_view, job_details_view, company_intelligence_view
+from .views import (
+    recommended_jobs, 
+    learning_recommendations, 
+    calculate_matches_webhook, 
+    mission_control_view, 
+    job_details_view, 
+    company_intelligence_view,
+    NotificationListView,
+    NotificationMarkReadView
+)
 
 urlpatterns = [
     path("recommended/", recommended_jobs, name="recommended_jobs"),
@@ -8,4 +17,6 @@ urlpatterns = [
     path("mission-control/", mission_control_view, name="mission_control"),
     path("jobs/<uuid:job_id>/details/", job_details_view, name="job_details"),
     path("companies/<uuid:company_id>/intelligence/", company_intelligence_view, name="company_intelligence"),
+    path("notifications/", NotificationListView.as_view(), name="notification_list"),
+    path("notifications/<uuid:notification_id>/read/", NotificationMarkReadView.as_view(), name="notification_read"),
 ]

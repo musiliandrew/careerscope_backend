@@ -246,6 +246,63 @@ class CompanyFollowView(generics.GenericAPIView):
         count = UserCompanyFollows.objects.filter(user=api_user).count()
         return Response({"followed": False, "followingCount": count}, status=status.HTTP_200_OK)
 
+import requests
+import re
+from django.conf import settings
+from django.utils.text import slugify
+
+class DynamicCompanyFollowView(generics.GenericAPIView):
+    """
+    On-Demand Dynamic Company Ingestion.
+    Searches for a company by name. If it doesn't exist, it creates a shell
+    and triggers the data ingestion system's discovery task.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        company_name = request.data.get('company_name')
+        if not company_name:
+            return Response({"error": "company_name is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        slug = slugify(company_name)
+        company = Companies.objects.filter(Q(slug=slug) | Q(name__iexact=company_name)).first()
+        
+        created = False
+        if not company:
+            # Create shell
+            company = Companies.objects.create(
+                name=company_name,
+                slug=slug,
+                is_monitored=True
+            )
+            created = True
+            
+            # Trigger ingestion system webhook
+            # Assuming ingestion system is running locally on port 8001 or as defined in env
+            ingestion_url = getattr(settings, 'INGESTION_SERVICE_URL', 'http://localhost:8001')
+            discover_endpoint = f"{ingestion_url}/companies/discover"
+            try:
+                requests.post(discover_endpoint, json={
+                    "company_id": str(company.id),
+                    "company_name": company.name
+                }, timeout=5)
+            except Exception as e:
+                # Log but don't fail the request, the task might be retried or run via schedule
+                print(f"Failed to trigger ingestion system for {company.name}: {e}")
+
+        # Follow
+        api_user = request.user
+        UserCompanyFollows.objects.get_or_create(user=api_user, company=company)
+        count = UserCompanyFollows.objects.filter(user=api_user).count()
+        
+        return Response({
+            "company_id": str(company.id),
+            "followed": True, 
+            "created_shell": created,
+            "followingCount": count,
+            "message": "Company followed and ingestion triggered." if created else "Company followed."
+        }, status=status.HTTP_200_OK)
+
 class GlobalCompanyNewsView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = CompanyNewsSerializer

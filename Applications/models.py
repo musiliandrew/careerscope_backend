@@ -97,6 +97,7 @@ class Applications(models.Model):
     rejection_reason = models.TextField(blank=True, null=True)
     feedback_received = models.TextField(blank=True, null=True)
     offer_details = models.JSONField(blank=True, null=True)
+    is_auto_applied = models.BooleanField(default=False)
     created_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(blank=True, null=True)
     last_status_change = models.DateTimeField(blank=True, null=True)

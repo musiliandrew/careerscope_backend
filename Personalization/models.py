@@ -193,3 +193,18 @@ class UserTrait(models.Model):
         indexes = [
             models.Index(fields=["user", "trait_key"]),
         ]
+
+class Notification(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=50) # 'job_alert', 'event_alert', 'system'
+    reference_id = models.CharField(max_length=100, blank=True, null=True) # ID of job/event
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "notifications"
+        ordering = ['-created_at']

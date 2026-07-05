@@ -1,5 +1,4 @@
 aenum==2.2.6
-aiobotocore @ file:///croot/aiobotocore_1714464387507/work
 aiohttp @ file:///croot/aiohttp_1715108769648/work
 aioitertools @ file:///tmp/build/80754af9/aioitertools_1607109665762/work
 aiosignal @ file:///tmp/build/80754af9/aiosignal_1637843061372/work

@@ -53,6 +53,8 @@ class JobPreferences(models.Model):
     available_from = models.DateTimeField(blank=True, null=True)
     notice_period = models.CharField(max_length=20, blank=True, null=True)
     company_types = models.TextField(blank=True, null=True)
+    auto_apply_enabled = models.BooleanField(default=False)
+    auto_apply_threshold = models.IntegerField(default=80)
 
 
 class CareerGoals(models.Model):
