@@ -31,7 +31,7 @@ def recommended_jobs(request: Request) -> Response:
     import requests
     import os
     
-    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/recommended-jobs/{user.id}"
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8005')}/dashboard/recommended-jobs/{user.id}"
     params = {"q": q} if q else {}
     
     try:
@@ -75,7 +75,7 @@ def recommended_jobs(request: Request) -> Response:
         cached = recent_cache.get(jid)
         
         if cached:
-            display_score = int(cached.win_probability if cached.win_probability is not None else cached.overall_score)
+            display_score = int(cached.overall_score if cached.overall_score is not None else 65)
             reasons = cached.match_reasons or ""
             concerns = cached.concerns or ""
         else:
@@ -209,7 +209,7 @@ def mission_control_view(request: Request) -> Response:
     import requests
     import os
     
-    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/mission-control/{request.user.id}"
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8005')}/dashboard/mission-control/{request.user.id}"
     try:
         resp = requests.get(ps_url, timeout=10)
         resp.raise_for_status()
@@ -226,7 +226,7 @@ def job_details_view(request: Request, job_id: str) -> Response:
     import requests
     import os
     
-    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/job-details/{request.user.id}/{job_id}"
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8005')}/dashboard/job-details/{request.user.id}/{job_id}"
     try:
         resp = requests.get(ps_url, timeout=10)
         resp.raise_for_status()
@@ -243,7 +243,7 @@ def company_intelligence_view(request: Request, company_id: str) -> Response:
     import requests
     import os
     
-    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8001')}/dashboard/company-intelligence/{request.user.id}/{company_id}"
+    ps_url = f"{os.getenv('PERSONALIZATION_SYSTEM_URL', 'http://127.0.0.1:8005')}/dashboard/company-intelligence/{request.user.id}/{company_id}"
     try:
         resp = requests.get(ps_url, timeout=15)
         resp.raise_for_status()

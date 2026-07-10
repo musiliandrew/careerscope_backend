@@ -28,7 +28,7 @@ class JobsListView(generics.ListAPIView):
     pagination_class = Pagination
 
     def get_queryset(self):
-        qs = Jobs.objects.filter(status='active').order_by('-posted_at')
+        qs = Jobs.objects.filter(status='active').select_related('company', 'location', 'source').order_by('-posted_at')
         q = self.request.query_params.get('q')
         role = self.request.query_params.get('role')  # ds|ai|ml|swe
         tech = self.request.query_params.get('tech')  # comma list

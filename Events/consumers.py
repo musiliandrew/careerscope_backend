@@ -75,42 +75,30 @@ class PubSubJobConsumerView(APIView):
                     reference_id=job_id
                 ))
                 
-                # Auto-Apply Logic
-                decision_engine_url = getattr(settings, "DECISION_ENGINE_URL", "http://127.0.0.1:8002")
-                evaluate_endpoint = f"{decision_engine_url}/api/v1/reasoning/evaluate_match"
-                
-                eval_payload = {
-                    "user_id": str(user.id),
-                    "job_snapshot": {
-                        "job_id": job_id,
-                        "title": title,
-                        "description": "Scraped job description placeholder"
-                    }
-                }
-                
-                try:
-                    response = requests.post(evaluate_endpoint, json=eval_payload, timeout=10)
-                    if response.status_code == 200:
-                        eval_result = response.json()
-                        overall_readiness = eval_result.get("overall_readiness", 0.0)
+                from Jobs.matching_client import calculate_win_probability
+                from Oauth.models import Profile, JobPreferences
+
+                profile = Profile.objects.filter(user=user).first()
+                if profile:
+                    try:
+                        job_obj = Jobs.objects.get(id=job_id)
+                        # Call calculate_win_probability which handles AI Enrichment and correct Decision Engine contract
+                        match_res = calculate_win_probability(profile, job_obj)
+                        overall_readiness = match_res.get("win_probability") or match_res.get("overall_score") or 0.0
                         
                         # Fetch User Preferences
-                        prefs = JobPreferences.objects.filter(profile__user=user).first()
+                        prefs = JobPreferences.objects.filter(profile=profile).first()
                         if prefs and prefs.auto_apply_enabled and overall_readiness >= prefs.auto_apply_threshold:
                             logger.info(f"High match score {overall_readiness} for {user.id}. Triggering Auto-Apply.")
                             
                             # Trigger Auto-Apply Agent
-                            email_system_url = getattr(settings, "EMAIL_INTELLIGENCE_URL", "http://127.0.0.1:8001")
+                            email_system_url = getattr(settings, "EMAIL_INTELLIGENCE_URL", "http://127.0.0.1:8004")
                             auto_apply_endpoint = f"{email_system_url}/webhook/agent/auto-apply"
                             
                             # Try to extract recruiter email from job metadata
                             recruiter_email = None
-                            try:
-                                job_obj = Jobs.objects.get(id=job_id)
-                                if job_obj.parsed_metadata and isinstance(job_obj.parsed_metadata, dict):
-                                    recruiter_email = job_obj.parsed_metadata.get('recruiter_email') or job_obj.parsed_metadata.get('contact_email')
-                            except Exception:
-                                pass
+                            if job_obj.parsed_metadata and isinstance(job_obj.parsed_metadata, dict):
+                                recruiter_email = job_obj.parsed_metadata.get('recruiter_email') or job_obj.parsed_metadata.get('contact_email')
                                 
                             if not recruiter_email:
                                 # Fallback to company domain
@@ -150,8 +138,8 @@ class PubSubJobConsumerView(APIView):
                                     notification_type="system",
                                     reference_id=job_id
                                 ))
-                except Exception as eval_e:
-                    logger.error(f"Failed to auto-apply for {user.id}: {eval_e}")
+                    except Exception as eval_e:
+                        logger.error(f"Failed to auto-apply/match for {user.id}: {eval_e}")
                 
             if notifications:
                 Notification.objects.bulk_create(notifications)
@@ -205,7 +193,7 @@ class PubSubApplicationEventConsumerView(APIView):
                 return Response({"status": "user not found"}, status=status.HTTP_200_OK)
                 
             # Call Decision Engine
-            decision_engine_url = getattr(settings, "DECISION_ENGINE_URL", "http://127.0.0.1:8002")
+            decision_engine_url = getattr(settings, "DECISION_ENGINE_URL", "http://127.0.0.1:8003")
             analyze_endpoint = f"{decision_engine_url}/api/v1/reasoning/analyze_rejection"
             
             reasoning_payload = {

@@ -58,21 +58,24 @@ class TrackInterestView(APIView):
 
         job = Jobs.objects.get(id=job_id)
 
-        # Upsert by (user, job, interest_type)
-        ji, created = JobInterests.objects.update_or_create(
+        import uuid
+        ji, created = JobInterests.objects.get_or_create(
             user=request.user,
             job=job,
             interest_type=interest_type,
             defaults={
+                "id": uuid.uuid4(),
                 "clicked_url": clicked_url,
                 "source_page": source_page,
+                "created_at": timezone.now(),
                 "updated_at": timezone.now(),
             },
         )
-        # Ensure created_at if missing
-        if not ji.created_at:
-            ji.created_at = timezone.now()
-            ji.save(update_fields=["created_at", "updated_at"])
+        if not created:
+            ji.clicked_url = clicked_url
+            ji.source_page = source_page
+            ji.updated_at = timezone.now()
+            ji.save()
 
         event_type = UserBehaviorEvent.EventType.JOB_CLICK
         if interest_type in {"save", "saved", "bookmark"}:

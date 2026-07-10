@@ -731,7 +731,7 @@ def career_card_summary(request: Request):
         relevant_evidence=[]
     )
     
-    client = DecisionEngineClient(base_url=os.getenv("DECISION_ENGINE_URL", "http://localhost:8000"))
+    client = DecisionEngineClient(base_url=os.getenv("DECISION_ENGINE_URL", "http://localhost:8003"))
     try:
         result = async_to_sync(client.evaluate_match)(eval_req)
         data = result.model_dump(mode="json")
