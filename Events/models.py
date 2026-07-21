@@ -35,4 +35,13 @@ class Event(models.Model):
         managed = True
         db_table = 'events'
 
-# Create your models here.
+class OutboxEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    topic = models.CharField(max_length=255)
+    event_type = models.CharField(max_length=255)
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = 'outbox_events'

@@ -153,6 +153,11 @@ class FullProfileSerializer(ModelSerializer):
         representation["email"] = instance.user.email
         del representation["avatar_id"]
 
+        # Calculate real GitHub metrics
+        github_projects = instance.projects.filter(evidence__evidence_type="github_repo").distinct().count()
+        github_languages = list(instance.skills.filter(verification_source="GitHub Profile Scanner")
+                              .values_list('skill_name', flat=True)[:3])
+
         # Add integrations status
         representation["integrations"] = {
             "email": {
@@ -164,9 +169,9 @@ class FullProfileSerializer(ModelSerializer):
                 "lastSync": instance.gmail_last_sync.isoformat() if instance.gmail_last_sync else "",
             },
             "github": {
-                "imported": bool(instance.github_url),
-                "projects": 0,
-                "topLanguages": [],
+                "imported": instance.github_sync_enabled,
+                "projects": github_projects,
+                "topLanguages": github_languages,
             },
             "calendar": {
                 "connected": instance.calendar_sync_enabled,

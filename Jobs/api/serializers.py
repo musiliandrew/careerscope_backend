@@ -52,14 +52,22 @@ class JobListSerializer(serializers.ModelSerializer):
         if job_id not in self._cached_match_results:
             profile = self._get_profile()
             if not profile:
-                return {"win_probability": 45, "reasons": None, "concerns": None}
+                return {"win_probability": 0, "reasons": None, "concerns": None}
             
-            from Jobs.matching_client import calculate_win_probability
-            try:
-                # One call instead of three
-                self._cached_match_results[job_id] = calculate_win_probability(profile, obj, deep_analysis=False)
-            except:
-                self._cached_match_results[job_id] = {"win_probability": 65, "reasons": "Matching logic unavailable", "concerns": None}
+            from Jobs.models import JobMatchScores
+            cached = JobMatchScores.objects.filter(user=profile.user, job=obj).first()
+            if cached and cached.overall_score is not None:
+                self._cached_match_results[job_id] = {
+                    "win_probability": int(cached.overall_score),
+                    "reasons": cached.match_reasons,
+                    "concerns": cached.concerns
+                }
+            else:
+                self._cached_match_results[job_id] = {
+                    "win_probability": 0, 
+                    "reasons": None, 
+                    "concerns": None
+                }
         
         return self._cached_match_results[job_id]
 

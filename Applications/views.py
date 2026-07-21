@@ -4,8 +4,8 @@ from django.utils import timezone
 from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
-from .models import Applications, ApplicationStatusHistory, ApplicationEvents
-from .serializers import ApplicationSerializer, ApplicationEventSerializer
+from .serializers import ApplicationSerializer, ApplicationEventSerializer, PendingInterviewConfirmationSerializer
+from .models import Applications, ApplicationStatusHistory, ApplicationEvents, PendingInterviewConfirmation
 class ApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ApplicationSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -84,6 +84,42 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application = self.get_object()
         self._generate_ai_status_insight(application, application.status)
         return Response({"status": "Insight generated", "notes": application.notes})
+
+class PendingInterviewViewSet(viewsets.ModelViewSet):
+    serializer_class = PendingInterviewConfirmationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return PendingInterviewConfirmation.objects.filter(
+            application__user=self.request.user, 
+            status='pending'
+        ).select_related('application')
+
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        interview = self.get_object()
+        chosen_time = request.data.get('chosen_time')
+        if not chosen_time:
+            return Response({"error": "chosen_time is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        interview.status = 'confirmed'
+        interview.user_response = chosen_time
+        interview.confirmed_at = timezone.now()
+        interview.save()
+        
+        app = interview.application
+        if app.status != 'interview':
+            app.status = 'interview'
+            app.save(update_fields=['status'])
+            
+        return Response({"status": "confirmed", "chosen_time": chosen_time})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        interview = self.get_object()
+        interview.status = 'rejected'
+        interview.save(update_fields=['status'])
+        return Response({"status": "rejected"})
 
 
 @api_view(['POST'])

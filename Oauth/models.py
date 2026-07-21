@@ -24,6 +24,11 @@ class Profile(models.Model):
     calendar_credentials = models.JSONField(blank=True, null=True)
     calendar_sync_enabled = models.BooleanField(default=False)
     calendar_last_sync = models.DateTimeField(blank=True, null=True)
+    
+    # GitHub integration
+    github_credentials = models.JSONField(blank=True, null=True)
+    github_sync_enabled = models.BooleanField(default=False)
+    github_last_sync = models.DateTimeField(blank=True, null=True)
 
     # OAuth and account metadata migrated from the old Oauth.Users table.
     google_id = models.CharField(max_length=255, blank=True, null=True)

@@ -139,6 +139,12 @@ class CompaniesFeedView(generics.GenericAPIView):
             else:
                 followed_ids = UserCompanyFollows.objects.filter(user=api_user).values_list('company_id', flat=True)
                 qs = qs.filter(id__in=followed_ids)
+                
+        from django.db.models import Prefetch
+        qs = qs.prefetch_related(
+            Prefetch('companynews_set', queryset=CompanyNews.objects.order_by('-published_date', '-scraped_at'), to_attr='cached_news'),
+            Prefetch('jobs_set', queryset=Jobs.objects.filter(status='active').order_by('-posted_at'), to_attr='cached_jobs')
+        )
 
         page = self.paginate_queryset(qs)
         companies_list = page if page is not None else qs
@@ -158,10 +164,17 @@ class CompaniesFeedView(generics.GenericAPIView):
         serializer = CompanyListSerializer(companies_list, many=True, context={'request': request})
         companies_data = serializer.data
 
+        company_ids = [c.id for c in companies_list]
+        following_company_ids = set()
+        if api_user:
+            following_company_ids = set(UserCompanyFollows.objects.filter(user=api_user, company_id__in=company_ids).values_list('company_id', flat=True))
+        
+        monitored_company_ids = set(CompanyMonitoringJobs.objects.filter(company_id__in=company_ids).values_list('company_id', flat=True))
+
         for i, company_data in enumerate(companies_data):
             c = companies_list[i]
-            # recent news (up to 3)
-            news_qs = CompanyNews.objects.filter(company_id=c.id).order_by('-published_date', '-scraped_at')[:3]
+            
+            cached_news = getattr(c, 'cached_news', [])[:3]
             recent_news = [
                 {
                     "title": n.title,
@@ -169,30 +182,29 @@ class CompaniesFeedView(generics.GenericAPIView):
                     "source": getattr(n, 'source', None),
                     "date": getattr(n, 'published_date', None),
                 }
-                for n in news_qs
+                for n in cached_news
             ]
 
-            # recent jobs (up to 3)
-            jobs_qs = Jobs.objects.filter(company_id=c.id, status='active').order_by('-posted_at')[:3]
+            cached_jobs = getattr(c, 'cached_jobs', [])
             job_openings = [
                 {
                     "title": j.title,
                     "location": getattr(j.location, 'city', None),
                     "type": j.work_type,
-                    "salary": (f"${int(j.salary_min):,} - ${int(j.salary_max):,}" if j.salary_min and j.salary_max else None),
+                    "salary": (f"${int(j.salary_min):,} - ${int(j.salary_max):,}" if getattr(j, 'salary_min', None) and getattr(j, 'salary_max', None) else None),
                     "url": j.apply_url or j.external_url,
                     "postedDate": j.posted_at,
                 }
-                for j in jobs_qs
+                for j in cached_jobs[:3]
             ]
 
             # Match frontend CamelCase expectations
             company_data["logoUrl"] = company_data.get("logo_url")
             company_data["techStack"] = getattr(c, 'tech_stack', []) or []
-            company_data["isFollowing"] = UserCompanyFollows.objects.filter(user=api_user, company_id=c.id).exists() if api_user else False
-            company_data["openRoles"] = Jobs.objects.filter(company_id=c.id, status='active').count()
+            company_data["isFollowing"] = c.id in following_company_ids
+            company_data["openRoles"] = len(cached_jobs)
             company_data["isHiring"] = company_data.get("is_actively_hiring", False)
-            company_data["monitoringActive"] = CompanyMonitoringJobs.objects.filter(company_id=c.id).exists()
+            company_data["monitoringActive"] = c.id in monitored_company_ids
             company_data["matchScore"] = 45 
 
             company_data["recentNews"] = recent_news

@@ -22,6 +22,7 @@ from django.utils import timezone
 from .models import Profile, UserSkills, EducationBackground, WorkExperience, Project, JobPreferences, CareerGoals
 from .backblaze import blaze_client
 from Personalization.utils import notify_personalization_service
+from .github_scanner import GithubScanner
 
 User = get_user_model()
 
@@ -279,15 +280,42 @@ def github_callback(request: Request):
     if not email:
         return redirect(f"{FRONTEND_URL}{CALLBACK_PATH}?error=email_missing")
 
-    user, created = _get_or_create_user_by_email(email, username)
-    Profile.objects.update_or_create(
+    # Check if user is already logged in (linking an account)
+    user = None
+    refresh_token_cookie = request.COOKIES.get("refresh_token")
+    if refresh_token_cookie:
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+            token = RefreshToken(refresh_token_cookie)
+            user_id = token.payload.get('user_id')
+            user = User.objects.get(id=user_id)
+        except Exception:
+            pass
+
+    if not user:
+        user, _ = _get_or_create_user_by_email(email, username)
+
+    github_creds = {"access_token": access_token} if access_token else None
+
+    profile, _ = Profile.objects.update_or_create(
         user=user,
         defaults={
             "github_id": str(user_json.get("id") or ""),
+            "github_url": user_json.get("html_url") or "",
             "email_verified": True,
             "last_login_at": timezone.now(),
+            "github_credentials": github_creds,
+            "github_sync_enabled": True if access_token else False,
         },
     )
+
+    # Trigger the GitHub Scanner to instantly populate Projects and Skills!
+    if access_token:
+        try:
+            scanner = GithubScanner(access_token)
+            scanner.scan_and_sync(profile)
+        except Exception as e:
+            logger.error(f"GitHub Sync Failed: {e}")
 
     refresh = RefreshToken.for_user(user)
     access_token_jwt = str(refresh.access_token)
@@ -320,7 +348,7 @@ def google_login(request: Request):
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": "openid email profile",
+        "scope": "openid email profile https://www.googleapis.com/auth/calendar.events",
         "state": state,
         "access_type": "offline",
         "prompt": "select_account",
@@ -374,7 +402,25 @@ def google_callback(request: Request):
     if not email:
         return redirect(f"{FRONTEND_URL}{CALLBACK_PATH}?error=email_missing")
 
-    user, created = _get_or_create_user_by_email(email, username, full_name=name)
+    # Check if user is already logged in (linking an account)
+    user = None
+    refresh_token_cookie = request.COOKIES.get("refresh_token")
+    if refresh_token_cookie:
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+            token = RefreshToken(refresh_token_cookie)
+            user_id = token.payload.get('user_id')
+            user = User.objects.get(id=user_id)
+        except Exception:
+            pass
+
+    if not user:
+        user, _ = _get_or_create_user_by_email(email, username, full_name=name)
+    
+    # Save the refresh token to calendar_credentials if provided by Google
+    refresh_token = token_data.get("refresh_token")
+    calendar_creds = {"refresh_token": refresh_token} if refresh_token else None
+
     Profile.objects.update_or_create(
         user=user,
         defaults={
@@ -382,6 +428,8 @@ def google_callback(request: Request):
             "google_id": str(userinfo.get("id") or ""),
             "email_verified": bool(userinfo.get("verified_email", True)),
             "last_login_at": timezone.now(),
+            "calendar_credentials": calendar_creds,
+            "calendar_sync_enabled": True if refresh_token else False,
         },
     )
 
