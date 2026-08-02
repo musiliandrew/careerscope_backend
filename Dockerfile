@@ -22,4 +22,4 @@ EXPOSE 8000
 
 # The default command will run the django server.
 # Celery commands will be overridden in docker-compose.yml
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 backend.wsgi:application
