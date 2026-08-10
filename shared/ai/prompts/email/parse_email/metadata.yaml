@@ -1,0 +1,10 @@
+name: "email.parse_email"
+version: "1.0.0"
+description: "Extracts structured job application status from raw recruiter emails"
+model: "gemini-3.5-flash"
+temperature: 0.1
+max_tokens: 1024
+expected_variables:
+  - "email_subject"
+  - "email_sender"
+  - "email_body"

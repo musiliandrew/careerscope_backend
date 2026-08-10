@@ -1,0 +1,5 @@
+name: match_score
+version: 1.0.0
+owner: decision-engine
+temperature: 0.2
+model: gemini

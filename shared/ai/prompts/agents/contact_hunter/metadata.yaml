@@ -1,0 +1,5 @@
+name: "agents.contact_hunter"
+version: "1.0.0"
+owner: "career_scoper_contact_hunter"
+temperature: 0.1
+model: "gemini"

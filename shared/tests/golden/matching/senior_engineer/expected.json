@@ -1,0 +1,5 @@
+{
+  "overall_readiness": 88.5,
+  "missing_capabilities": ["Transformers"],
+  "strengths": ["Python", "PyTorch"]
+}

@@ -1,0 +1,5 @@
+name: "reasoning.analyze_rejection"
+version: "1.0.0"
+owner: "career_scoper_decision_engine"
+temperature: 0.4
+model: "gemini"

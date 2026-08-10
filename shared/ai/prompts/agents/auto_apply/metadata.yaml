@@ -1,0 +1,5 @@
+name: "agents.auto_apply"
+version: "1.0.0"
+owner: "career_scoper_auto_apply"
+temperature: 0.7
+model: "gemini"

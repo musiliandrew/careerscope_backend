@@ -1,0 +1,22 @@
+{
+  "profile": {
+    "target_role": "Senior ML Engineer",
+    "capabilities": [
+      {
+        "name": "Python",
+        "verification_score": 95,
+        "depth_score": 90
+      },
+      {
+        "name": "PyTorch",
+        "verification_score": 85,
+        "depth_score": 80
+      }
+    ]
+  },
+  "job_requirements": {
+    "title": "Machine Learning Engineer",
+    "company": "OpenAI",
+    "required_skills": ["Python", "PyTorch", "Transformers"]
+  }
+}
