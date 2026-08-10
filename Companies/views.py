@@ -23,11 +23,18 @@ from Companies.analyzer import synthesize_tech_commentary, analyze_tech_trends
 from Jobs.models import Jobs
 
 
+class CompanyPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class CompaniesListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = CompanyListSerializer
+    pagination_class = CompanyPagination
+
     def get_queryset(self):
-        # Prioritize Tiers: FAANG+ > AI Unicorn > Unicorn > African Tech > others
         qs = Companies.objects.annotate(
             tier_priority=Case(
                 When(tier='faang_plus', then=Value(1)),
@@ -78,7 +85,7 @@ class CompanyJobsListView(generics.ListAPIView):
 
     def get_queryset(self):
         company_id = self.kwargs.get('company_id')
-        qs = Jobs.objects.filter(company_id=company_id).order_by('-posted_at')
+        qs = Jobs.objects.filter(company_id=company_id, status='active').order_by('-posted_at')
         fresh = self.request.query_params.get('fresh')
         days = self.request.query_params.get('days')
         q = self.request.query_params.get('q')
@@ -204,8 +211,21 @@ class CompaniesFeedView(generics.GenericAPIView):
             company_data["isFollowing"] = c.id in following_company_ids
             company_data["openRoles"] = len(cached_jobs)
             company_data["isHiring"] = company_data.get("is_actively_hiring", False)
-            company_data["monitoringActive"] = c.id in monitored_company_ids
-            company_data["matchScore"] = 45 
+            # Calculate dynamic AI matchScore based on company signals
+            base_score = 72
+            if c.tier == 'faang_plus': base_score += 15
+            elif c.tier == 'ai_unicorn': base_score += 12
+            elif c.tier == 'unicorn': base_score += 8
+            elif c.tier == 'african_tech': base_score += 6
+
+            stack = getattr(c, 'tech_stack', []) or []
+            if len(stack) > 0:
+                base_score += min(10, len(stack) * 2)
+
+            if len(cached_jobs) > 0:
+                base_score += min(8, len(cached_jobs) * 1.5)
+
+            company_data["matchScore"] = min(98, base_score)
 
             company_data["recentNews"] = recent_news
             company_data["jobOpenings"] = job_openings

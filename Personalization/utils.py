@@ -38,3 +38,14 @@ def notify_personalization_service(event_type: str, object_type: str, object_id:
     }
     # Run in a background thread so it doesn't block the Django response
     threading.Thread(target=_send_webhook, args=("profile_updated", payload)).start()
+
+def wrap_affiliate_link(url: str) -> str:
+    """
+    Dummy wrapper for affiliate links.
+    """
+    if not url:
+        return ""
+    # Example logic: add ref=careerscope
+    if "?" in url:
+        return f"{url}&ref=careerscope"
+    return f"{url}?ref=careerscope"

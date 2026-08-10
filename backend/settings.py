@@ -149,11 +149,18 @@ SIMPLE_JWT = {
 }
 
 # CORS Settings
-# For cookie-based auth, you must NOT use wildcard when sending credentials.
+# For cookie-based auth, allow localhost:3000 (Next.js) & 5173 (Vite) as well as regexes
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:[0-9]+$",
+    r"^http://127\.0\.0\.1:[0-9]+$",
+    r"^https://.*\.vercel\.app$",
 ]
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 if FRONTEND_URL:
@@ -161,6 +168,8 @@ if FRONTEND_URL:
 
 # CSRF (trust frontend origin for API calls if needed)
 CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]

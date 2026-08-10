@@ -151,6 +151,8 @@ class FullProfileSerializer(ModelSerializer):
             else ""
         )
         representation["email"] = instance.user.email
+        representation["resume_url"] = instance.resume_url or ""
+        representation["has_cv"] = bool(instance.resume_url or instance.resume_data or (instance.experiences.count() > 0))
         del representation["avatar_id"]
 
         # Calculate real GitHub metrics

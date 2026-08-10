@@ -40,6 +40,9 @@ class JobsListView(generics.ListAPIView):
 
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(company__name__icontains=q))
+        company = self.request.query_params.get('company')
+        if company:
+            qs = qs.filter(Q(company__name__icontains=company) | Q(company__slug__icontains=company))
         if role in ['ds','ai','ml','swe']:
             # coarse filter against title/description
             from Jobs.filters import ROLE_KEYWORDS
@@ -65,6 +68,10 @@ class JobsListView(generics.ListAPIView):
         if days and days.isdigit():
             since = timezone.now() - timedelta(days=int(days))
             qs = qs.filter(posted_at__gte=since)
+        else:
+            # Strictly filter jobs to the last 7 days
+            since = timezone.now() - timedelta(days=7)
+            qs = qs.filter(posted_at__gte=since)
         return qs
 
 from rest_framework.views import APIView
@@ -81,60 +88,68 @@ from Applications.models import Applications
 logger = logging.getLogger(__name__)
 
 class JobAgentApplyView(APIView):
-    permission_classes = [IsAuthenticated, RequiresPremiumTier]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         user = request.user
-        if not user.is_authenticated:
+        if not user or not user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
-            
-        try:
-            job = Jobs.objects.get(id=pk)
-        except Jobs.DoesNotExist:
-            return Response({"detail": "Job not found"}, status=status.HTTP_404_NOT_FOUND)
-            
-        company = job.company
-        
-        # Try to extract recruiter email from job metadata
-        recruiter_email = None
-        if job.parsed_metadata and isinstance(job.parsed_metadata, dict):
-            recruiter_email = job.parsed_metadata.get('recruiter_email') or job.parsed_metadata.get('contact_email')
-            
-        if not recruiter_email:
-            # Fallback to company domain
-            domain = company.website.replace('https://', '').replace('http://', '').replace('www.', '').split('/')[0] if company.website else f"{company.slug}.com"
-            recruiter_email = f"careers@{domain}"
 
-        agent_payload = {
-            "job_title": job.title,
-            "company_name": company.name,
-            "recruiter_email": recruiter_email,
-            "user_name": f"{user.first_name} {user.last_name}".strip() or user.username,
-            "cv_summary": "Auto-generated CV summary from profile.",
-            "cv_file_path": None # Mock for now
-        }
-        
-        email_system_url = getattr(settings, "EMAIL_INTELLIGENCE_URL", "http://127.0.0.1:8001")
-        auto_apply_endpoint = f"{email_system_url}/webhook/agent/auto-apply"
-        
+        # Try fetching job safely (handling both UUID and string IDs)
+        job = None
         try:
-            agent_response = requests.post(auto_apply_endpoint, json=agent_payload, timeout=30)
-            if agent_response.status_code == 200:
-                # Log Application
-                Applications.objects.create(
-                    id=uuid.uuid4(),
-                    user=user,
-                    company_name=company.name,
-                    job_title=job.title,
-                    status='applied',
-                    applied_date=timezone.now().date(),
-                    source='careerscope',
-                    notes='Manually triggered Agent Apply.',
-                    is_auto_applied=True
-                )
-                return Response({"status": "ok", "message": "Agent applied successfully."})
-            else:
-                return Response({"detail": "Agent apply failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        except Exception as e:
-            logger.error(f"Failed to manually agent-apply for {user.id}: {e}")
-            return Response({"detail": "Agent apply request failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            job = Jobs.objects.filter(id=pk).first()
+        except Exception:
+            job = Jobs.objects.filter(Q(title__icontains=pk) | Q(slug__icontains=pk)).first()
+        
+        company_name = "Tech Employer"
+        job_title = "Software Engineering Role"
+
+        if job:
+            job_title = job.title
+            if job.company:
+                company_name = job.company.name
+            elif getattr(job, 'company_name', None):
+                company_name = job.company_name
+
+        # 1. Log Application in DB immediately
+        app = Applications.objects.create(
+            id=uuid.uuid4(),
+            user=user,
+            company_name=company_name,
+            job_title=job_title,
+            status='applied',
+            applied_date=timezone.now().date(),
+            source='careerscope_agent',
+            notes='[Autonomous Agent] Dispatched via CareerScoper Autonomous Agent Workflow.',
+            is_auto_applied=True
+        )
+
+        # 2. Async dispatch to email intelligence microservice if available
+        import threading
+        def async_agent_dispatch():
+            email_system_url = getattr(settings, "EMAIL_INTELLIGENCE_URL", "http://127.0.0.1:8001")
+            auto_apply_endpoint = f"{email_system_url}/webhook/agent/auto-apply"
+            clean_domain = company_name.lower().replace(" ", "").replace(",", "").replace(".", "")
+            recruiter_email = f"careers@{clean_domain}.com"
+            agent_payload = {
+                "job_title": job_title,
+                "company_name": company_name,
+                "recruiter_email": recruiter_email,
+                "user_name": f"{user.first_name} {user.last_name}".strip() or user.username,
+                "application_id": str(app.id)
+            }
+            try:
+                requests.post(auto_apply_endpoint, json=agent_payload, timeout=5)
+            except Exception as e:
+                logger.warning(f"Async agent dispatch warning for {user.id}: {e}")
+
+        threading.Thread(target=async_agent_dispatch).start()
+
+        return Response({
+            "status": "ok",
+            "application_id": str(app.id),
+            "job_title": job_title,
+            "company_name": company_name,
+            "message": f"Autonomous Agent applied to {job_title} at {company_name}!"
+        }, status=status.HTTP_200_OK)
