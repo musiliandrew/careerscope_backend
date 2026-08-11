@@ -1,0 +1,81 @@
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+client_secrets.json
+backend/client_secrets.json
+frontend/client_secrets.json
+*.secret.json
+*.credentials.json
+
+
+# Virtual environments
+env/
+./env/
+backend/env/
+venv/
+.venv/
+
+env/
+backend/env/
+venv/
+.venv/
+
+
+# Environment / secret files
+.env
+.env.*        # any dotenv files
+.envrc
+secrets.json
+*_service.json
+local_settings.py
+secret_key.txt
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+uploads/
+static/
+staticfiles/
+# compiled static (if you collectstatic locally)
+static_root/
+# Django migrations cache (keep migrations in repo, but ignore cache)
+*.log
+
+# Testing / coverage
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Editor / OS files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.DS_Store
+Thumbs.db
+
+# Misc caches
+.mypy_cache/
+.ruff_cache/
+.cache/
+pip-log.txt
+
+# AWS / Terraform / credentials
+.aws/
+.terraform/
+*.xml
+.idea/
