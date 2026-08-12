@@ -18,7 +18,8 @@ EXCLUDE_TITLE_EXACT = {
     'internet requirements', 'recruitment fraud', 'equal opportunity employer',
     'accommodation request', 'fraud alert', 'locations', 'military', 'inclusion',
     'our benefits', 'life @ cigna group', 'contract job opportunities', 'learn more',
-    'overview', 'explore', 'menu', 'home', 'news', 'events', 'privacy', 'security'
+    'overview', 'explore', 'menu', 'home', 'news', 'events', 'privacy', 'security',
+    'scam notice', 'job scam notice', 'scam alert', 'security notice', 'phishing notice'
 }
 
 EXCLUDE_TITLE_PATTERNS = [
