@@ -45,6 +45,20 @@ class JobsListView(generics.ListAPIView):
         for pattern in junk_patterns:
             qs = qs.exclude(title__iexact=pattern).exclude(title__istartswith=f"{pattern} |")
 
+        # Exclude category listings, blog posts, search headers & announcements
+        qs = qs.exclude(
+            Q(title__istartswith='View all') |
+            Q(title__istartswith='Learn more about') |
+            Q(title__istartswith='Search for') |
+            Q(title__istartswith='Read our') |
+            Q(title__istartswith='About our') |
+            Q(title__istartswith='Welcome to') |
+            Q(title__icontains='Newsletter') |
+            Q(title__icontains='work blog') |
+            Q(title__icontains='Announcement') |
+            Q(title__icontains='Sign-up')
+        )
+
         company = self.request.query_params.get('company')
         if not company:
             qs = qs.exclude(company__tier__in=['faang_plus', 'african_tech'])
