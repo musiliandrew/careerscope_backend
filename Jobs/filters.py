@@ -16,7 +16,9 @@ EXCLUDE_TITLE_EXACT = {
     'undergraduate program', 'graduate trainee program', 'management trainee',
     'privacy policy', 'terms of service', 'about us', 'contact us',
     'internet requirements', 'recruitment fraud', 'equal opportunity employer',
-    'accommodation request', 'fraud alert'
+    'accommodation request', 'fraud alert', 'locations', 'military', 'inclusion',
+    'our benefits', 'life @ cigna group', 'contract job opportunities', 'learn more',
+    'overview', 'explore', 'menu', 'home', 'news', 'events', 'privacy', 'security'
 }
 
 EXCLUDE_TITLE_PATTERNS = [
