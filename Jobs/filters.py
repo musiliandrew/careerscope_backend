@@ -14,7 +14,9 @@ EXCLUDE_TITLE_EXACT = {
     'founders', 'work', 'lecturers', 'volunteers', 'contractual opportunities', 'internships',
     'unpaid', 'attachments (no pay)', 'internal applications', 'late preparation',
     'undergraduate program', 'graduate trainee program', 'management trainee',
-    'privacy policy', 'terms of service', 'about us', 'contact us'
+    'privacy policy', 'terms of service', 'about us', 'contact us',
+    'internet requirements', 'recruitment fraud', 'equal opportunity employer',
+    'accommodation request', 'fraud alert'
 }
 
 EXCLUDE_TITLE_PATTERNS = [
