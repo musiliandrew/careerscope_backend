@@ -36,7 +36,11 @@ class JobsListView(generics.ListAPIView):
             'ATTACHMENTS (NO PAY)', 'ATTACHMENTS', 'Internal Applications', 'Late preparation',
             'Hiring', 'Founders', 'Work', 'Lecturers', 'Volunteers', 'Contractual opportunities',
             'Internships', 'Unpaid', 'Undergraduate Program', 'Graduate Trainee Program',
-            'Management Trainee', 'SHARE YOUR RESUME/CV', 'Remote Hiring Guide', 'Hiring Tips'
+            'Management Trainee', 'SHARE YOUR RESUME/CV', 'Remote Hiring Guide', 'Hiring Tips',
+            'Read our FAQ', 'FAQ', 'FAQs', 'Frequently Asked Questions', 'Jobs', 'Company overview',
+            'About our company', 'About Us', 'What we do', 'Hiring process', 'How we hire', 'People',
+            'Our Team', 'Accommodation', 'Accessibility', 'Legal', 'Privacy Policy', 'Terms of Service',
+            'Contact us', 'Contact', 'Get in touch', 'Roles', 'Perks', 'Benefits', 'Overview', 'Home'
         ]
         for pattern in junk_patterns:
             qs = qs.exclude(title__iexact=pattern).exclude(title__istartswith=f"{pattern} |")
