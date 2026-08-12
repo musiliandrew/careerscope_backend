@@ -29,6 +29,22 @@ class JobsListView(generics.ListAPIView):
 
     def get_queryset(self):
         qs = Jobs.objects.filter(status='active').select_related('company', 'location', 'source').order_by('-posted_at')
+
+        # Exclude non-job site navigation headers and junk titles
+        junk_patterns = [
+            'Careers', 'Jobs search', 'View Openings', 'Cookie Settings', 'Right to Work',
+            'ATTACHMENTS (NO PAY)', 'ATTACHMENTS', 'Internal Applications', 'Late preparation',
+            'Hiring', 'Founders', 'Work', 'Lecturers', 'Volunteers', 'Contractual opportunities',
+            'Internships', 'Unpaid', 'Undergraduate Program', 'Graduate Trainee Program',
+            'Management Trainee', 'SHARE YOUR RESUME/CV', 'Remote Hiring Guide', 'Hiring Tips'
+        ]
+        for pattern in junk_patterns:
+            qs = qs.exclude(title__iexact=pattern).exclude(title__istartswith=f"{pattern} |")
+
+        company = self.request.query_params.get('company')
+        if not company:
+            qs = qs.exclude(company__tier__in=['faang_plus', 'african_tech'])
+            
         q = self.request.query_params.get('q')
         role = self.request.query_params.get('role')  # ds|ai|ml|swe
         tech = self.request.query_params.get('tech')  # comma list
@@ -40,7 +56,6 @@ class JobsListView(generics.ListAPIView):
 
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q) | Q(company__name__icontains=q))
-        company = self.request.query_params.get('company')
         if company:
             qs = qs.filter(Q(company__name__icontains=company) | Q(company__slug__icontains=company))
         if role in ['ds','ai','ml','swe']:
